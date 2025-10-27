@@ -4,14 +4,16 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 
+
 public class ServidorDiretorio {
 
-    // Mapa: nome do arquivo -> endereço do peer (host:porta)
+    
     private static final Map<String, String> arquivos = new HashMap<>();
 
     public static void main(String[] args) {
-        final int porta = 5000; // ✅ Porta fixa para todos os peers
-        System.out.println("🌐 Servidor de diretórios iniciado na porta " + porta + "...");
+        final int porta = 5000;
+        System.out.println("🌐 Servidor de Diretórios iniciado na porta " + porta + "...");
+        System.out.println("🗂️  Aguardando registros e consultas de peers...\n");
 
         try (ServerSocket serverSocket = new ServerSocket(porta)) {
             while (true) {
@@ -19,13 +21,13 @@ public class ServidorDiretorio {
                 new Thread(() -> tratarConexao(socket)).start();
             }
         } catch (IOException e) {
-            System.err.println("Erro no servidor de diretórios: " + e.getMessage());
+            System.err.println("❌ Erro no servidor de diretórios: " + e.getMessage());
         }
     }
 
     private static void tratarConexao(Socket socket) {
         String clienteInfo = socket.getInetAddress().getHostAddress() + ":" + socket.getPort();
-        System.out.println("🔗 Nova conexão de " + clienteInfo);
+        System.out.println("🔗 Nova conexão recebida de " + clienteInfo);
 
         try (
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -37,48 +39,75 @@ public class ServidorDiretorio {
             System.out.println("📩 Comando recebido: " + comando);
 
             if (comando.startsWith("REGISTER")) {
-                String[] dados = comando.split(" ");
-                if (dados.length != 3) {
-                    out.println("ERRO: formato incorreto. Use: REGISTER <arquivo> <endereco>");
-                    return;
-                }
-
-                arquivos.put(dados[1], dados[2]);
-                out.println("Arquivo registrado com sucesso: " + dados[1]);
-                System.out.println("📁 Arquivo '" + dados[1] + "' registrado por " + dados[2]);
-
+                registrarArquivo(comando, out);
             } else if (comando.equals("LIST")) {
-                if (arquivos.isEmpty()) {
-                    out.println("Nenhum arquivo registrado.");
-                } else {
-                    for (Map.Entry<String, String> entry : arquivos.entrySet()) {
-                        out.println(entry.getKey() + " -> " + entry.getValue());
-                    }
-                }
-
+                listarArquivos(out);
             } else if (comando.startsWith("GET")) {
-                String[] dados = comando.split(" ");
-                if (dados.length != 2) {
-                    out.println("ERRO: formato incorreto. Use: GET <arquivo>");
-                    return;
-                }
-
-                String resposta = arquivos.getOrDefault(dados[1], "NAO_ENCONTRADO");
-                out.println(resposta);
-                System.out.println("🔎 Consulta: " + dados[1] + " -> " + resposta);
-
+                localizarArquivo(comando, out);
             } else {
-                out.println("Comando desconhecido!");
-                System.out.println("❌ Comando inválido recebido: " + comando);
+                out.println("❌ Comando desconhecido!");
+                System.out.println("⚠️  Comando inválido recebido de " + clienteInfo + ": " + comando);
             }
 
         } catch (IOException e) {
-            System.err.println("Erro no tratamento da conexão: " + e.getMessage());
+            System.err.println("💥 Erro ao tratar conexão com " + clienteInfo + ": " + e.getMessage());
         } finally {
             try {
                 socket.close();
-                System.out.println("🔒 Conexão encerrada com " + clienteInfo);
+                System.out.println("🔒 Conexão encerrada com " + clienteInfo + "\n");
             } catch (IOException ignored) {}
+        }
+    }
+
+    // === REGISTRAR ARQUIVO ===
+    private static void registrarArquivo(String comando, PrintWriter out) {
+        String[] dados = comando.split(" ");
+        if (dados.length != 3) {
+            out.println("ERRO: formato incorreto. Use: REGISTER <arquivo> <endereco>");
+            return;
+        }
+
+        String nomeArquivo = dados[1];
+        String enderecoPeer = dados[2];
+        arquivos.put(nomeArquivo, enderecoPeer);
+
+        out.println("✅ Arquivo registrado com sucesso: " + nomeArquivo);
+        System.out.println("📁 Novo registro: '" + nomeArquivo + "' → " + enderecoPeer);
+    }
+
+    // === LISTAR ARQUIVOS ===
+    private static void listarArquivos(PrintWriter out) {
+        if (arquivos.isEmpty()) {
+            out.println("⚠️  Nenhum arquivo registrado no momento.");
+            System.out.println("📂 Pedido de listagem — Nenhum arquivo disponível.");
+            return;
+        }
+
+        out.println("📜 Lista de arquivos disponíveis:");
+        for (Map.Entry<String, String> entry : arquivos.entrySet()) {
+            out.println("  • " + entry.getKey() + " → " + entry.getValue());
+        }
+
+        System.out.println("📋 Lista enviada a um peer.");
+    }
+
+    // === LOCALIZAR ARQUIVO ===
+    private static void localizarArquivo(String comando, PrintWriter out) {
+        String[] dados = comando.split(" ");
+        if (dados.length != 2) {
+            out.println("ERRO: formato incorreto. Use: GET <arquivo>");
+            return;
+        }
+
+        String nomeArquivo = dados[1];
+        String endereco = arquivos.get(nomeArquivo);
+
+        if (endereco != null) {
+            out.println(endereco);
+            System.out.println("🔎 Consulta: '" + nomeArquivo + "' localizado em " + endereco);
+        } else {
+            out.println("NAO_ENCONTRADO");
+            System.out.println("❌ Consulta: '" + nomeArquivo + "' não encontrado no diretório.");
         }
     }
 }

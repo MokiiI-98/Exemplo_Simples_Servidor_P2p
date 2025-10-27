@@ -8,46 +8,51 @@ import java.util.Scanner;
 
 public class Peer {
 
-    // ✅ Mesmo servidor e porta fixos para todos os peers
     private static final String SERVIDOR_DIRETORIO = "localhost";
     private static final int PORTA_DIRETORIO = 5000;
 
     public static void main(String[] args) throws Exception {
         Scanner sc = new Scanner(System.in);
         System.out.println("=== PEER P2P Centralizado ===");
-        System.out.println("1 - Compartilhar arquivo");
-        System.out.println("2 - Baixar arquivo");
+        System.out.println("1 - Compartilhar arquivo (Peer Servidor)");
+        System.out.println("2 - Baixar arquivo (Peer Cliente)");
+        System.out.println("3 - Listar arquivos registrados");
         System.out.print("Escolha: ");
         int opcao = sc.nextInt();
         sc.nextLine();
 
-        if (opcao == 1) {
-            System.out.print("Nome do arquivo para compartilhar: ");
-            String arquivo = sc.nextLine();
-            System.out.print("Porta do servidor local (ex: 6001): ");
-            int porta = sc.nextInt();
-            iniciarCompartilhamento(arquivo, porta);
-        } else if (opcao == 2) {
-            System.out.print("Nome do arquivo para baixar: ");
-            String nome = sc.nextLine();
-            baixarArquivo(nome);
-        } else {
-            System.out.println("Opção inválida!");
+        switch (opcao) {
+            case 1 -> {
+                System.out.print("Nome do arquivo para compartilhar: ");
+                String arquivo = sc.nextLine();
+                System.out.print("Porta do servidor local (ex: 6001): ");
+                int porta = sc.nextInt();
+                iniciarCompartilhamento(arquivo, porta);
+            }
+            case 2 -> {
+                System.out.print("Nome do arquivo para baixar: ");
+                String nome = sc.nextLine();
+                baixarArquivo(nome);
+            }
+            case 3 -> listarArquivos();
+            default -> System.out.println("❌ Opção inválida!");
         }
 
         sc.close();
     }
 
-    // ✅ Modo Servidor: registra o arquivo e envia notificações
+    // === PEER SERVIDOR ===
     private static void iniciarCompartilhamento(String arquivo, int porta) throws Exception {
-        // Descobre o IP real da máquina
-        String ipLocal = InetAddress.getLocalHost().getHostAddress(); // ✅
+        String ipLocal = InetAddress.getLocalHost().getHostAddress();
 
         // Registro no servidor de diretórios
         try (Socket s = new Socket(SERVIDOR_DIRETORIO, PORTA_DIRETORIO);
              PrintWriter out = new PrintWriter(s.getOutputStream(), true)) {
-            out.println("REGISTER " + arquivo + " " + ipLocal + ":" + porta); // ✅ IP real e porta
+            out.println("REGISTER " + arquivo + " " + ipLocal + ":" + porta);
         }
+
+        System.out.println("📡 Arquivo '" + arquivo + "' registrado no diretório.");
+        System.out.println("📍 IP: " + ipLocal + " | Porta: " + porta);
 
         // Envio de notificação por e-mail
         String dataHora = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new Date());
@@ -81,7 +86,7 @@ public class Peer {
             while ((bytes = fis.read(buffer)) != -1) {
                 outFile.write(buffer, 0, bytes);
             }
-            System.out.println("📤 Arquivo enviado para cliente " + cliente.getInetAddress());
+            System.out.println("📤 Arquivo '" + arquivo + "' enviado para " + cliente.getInetAddress());
         } catch (IOException e) {
             System.err.println("Erro ao enviar arquivo: " + e.getMessage());
         } finally {
@@ -91,7 +96,7 @@ public class Peer {
         }
     }
 
-    // ✅ Modo Cliente: consulta o servidor de diretórios e baixa direto do peer
+    // === PEER CLIENTE ===
     private static void baixarArquivo(String nome) throws Exception {
         String endereco;
         try (
@@ -112,6 +117,10 @@ public class Peer {
         String host = dados[0];
         int porta = Integer.parseInt(dados[1]);
 
+        System.out.println("🔍 Servidor de diretório retornou:");
+        System.out.println("   -> IP: " + host + " | Porta: " + porta);
+        System.out.println("⏬ Iniciando download do peer...");
+
         try (
                 Socket peer = new Socket(host, porta);
                 InputStream input = peer.getInputStream();
@@ -122,7 +131,23 @@ public class Peer {
             while ((bytes = input.read(buffer)) != -1) {
                 fos.write(buffer, 0, bytes);
             }
-            System.out.println("✅ Download concluído: " + nome);
+            System.out.println("✅ Download concluído com sucesso: download_" + nome);
+        }
+    }
+
+    // === LISTAR ARQUIVOS REGISTRADOS ===
+    private static void listarArquivos() throws Exception {
+        try (
+                Socket s = new Socket(SERVIDOR_DIRETORIO, PORTA_DIRETORIO);
+                PrintWriter out = new PrintWriter(s.getOutputStream(), true);
+                BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()))
+        ) {
+            out.println("LIST");
+            System.out.println("📜 Arquivos registrados no servidor de diretórios:");
+            String linha;
+            while ((linha = in.readLine()) != null) {
+                System.out.println("  - " + linha);
+            }
         }
     }
 }
